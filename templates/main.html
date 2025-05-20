@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>캘린더 웹</title>
+    {# 외부 CSS 파일을 사용하려면 아래 주석을 해제하고, static/css/style.css 파일을 생성/수정하세요. #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        #next-month-button { margin-right: 20px; } /* 다음 달 버튼 숨김 */
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding-bottom: 50px; }
+        .flash-messages { list-style: none; padding: 0; margin: 0 0 15px 0; width: 80%; }
+        .flash-messages li { padding: 10px; margin-bottom: 10px; border-radius: 4px; }
+        .flash-messages .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .flash-messages .danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .flash-messages .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .flash-messages .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        .flash-messages .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; } /* 추가: 일반 error 클래스 */
+
+        .top-bar { width: 80%; display: flex; justify-content: space-between; align-items: center; padding: 10px 0; margin-bottom: 10px; }
+        .top-bar .user-actions { display: flex; align-items: center; }
+        .top-bar .user-actions form, .top-bar .user-actions button, .top-bar .user-actions a { margin-left: 10px; }
+        .top-bar h2 { margin: 0 15px; text-align: center; flex-grow: 1; }
+        .top-bar .nav-button { padding: 5px 10px; text-decoration: none; background-color: #f0f0f0; color: #333; border: 1px solid #ccc; border-radius: 4px;}
+
+        .main-content-wrapper { width: 80%; display: flex; flex-direction: column; }
+        .main-content { display: flex; width: 100%; }
+        .calendar-container { flex-grow: 1; margin-right: 20px; }
+        .user-stats-container { width: 250px; border-left: 1px solid #ccc; padding-left: 20px; flex-shrink: 0; } /* 너비 고정 및 축소 방지 */
+
+        table.calendar { width: 100%; border-collapse: collapse; }
+        table.calendar th, table.calendar td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+            vertical-align: top;
+            height: 70px;
+        }
+        table.calendar th { background-color: #f2f2f2; }
+        .calendar-day-cell a { text-decoration: none; color: inherit; display: block; width:100%; height:100%;}
+        .calendar-day { min-height: 50px; }
+        .day-number { font-weight: bold; display: block; margin-bottom: 5px; text-align: left;}
+        .today .day-number { color: #007bff; border: 1px solid #007bff; border-radius: 50%; width: 20px; height:20px; display:inline-block; text-align:center; line-height:18px;}
+        .selected-day .day-number { background-color: #e9ecef; display:inline-block; border-radius:4px; padding:1px 3px; }
+        .other-month { color: #aaa; }
+        .check-mark-area { display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: flex-start; margin-top: 3px;}
+        .check-mark {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            margin: 1px;
+            display: inline-block;
+        }
+        .user-stats-container h3 { margin-top: 0; }
+        .user-stat { margin-bottom: 10px; font-size: 0.9em; }
+
+        .thoughts-section { margin-top: 30px; width: 100%; border-top: 1px solid #eee; padding-top: 20px; }
+        .thoughts-section h3 { margin-bottom: 15px; }
+        .thought-form { margin-bottom: 15px; }
+        .thought-form textarea { width: calc(100% - 22px); min-height: 60px; margin-bottom: 10px; padding:10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;}
+        .thought-form button { padding: 8px 15px; background-color: #28a745; color: white; border:none; border-radius: 4px; cursor: pointer; }
+        .thought-item { border: 1px solid #eee; padding: 15px; margin-bottom: 15px; border-radius: 4px; background-color: #f9f9f9;}
+        .thought-item .info { font-size: 0.85em; color: #555; margin-bottom: 5px; }
+        .thought-item .info .actions-group { float: right; } /* 수정/삭제 버튼 오른쪽 정렬 */
+        .thought-item .info .actions-group a, .thought-item .info .actions-group button { margin-left: 8px; }
+        .thought-item p { margin-top: 0; margin-bottom: 10px; white-space: pre-wrap; }
+        .actions { margin-top: 5px; margin-bottom: 10px; }
+        .like-btn { background: none; border: none; cursor: pointer; padding: 0; font-size: 1.2em; vertical-align: middle;}
+        .like-count { margin-left: 5px; font-size: 0.9em; color: #555; vertical-align: middle;}
+
+        .comments-section { margin-top: 10px; padding-left: 20px; border-left: 3px solid #ddd;}
+        .comment-item { font-size: 0.9em; margin-bottom: 8px; background-color: #fff; padding:8px; border-radius: 3px; border: 1px solid #eee;}
+        .comment-item .info { font-size: 0.8em; color: #666;}
+        .comment-item .info .actions-group { float: right; } /* 댓글 수정/삭제 버튼 오른쪽 정렬 */
+        .comment-item .info .actions-group a, .comment-item .info .actions-group button { margin-left: 5px; }
+        .comment-form textarea { width: calc(100% - 22px); min-height: 40px; margin-top:5px; margin-bottom: 5px; padding:8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;}
+        .comment-form button { padding: 5px 10px; font-size: 0.9em; background-color: #007bff; color:white; border:none; border-radius: 3px;}
+        .edit-delete-btn { font-size: 0.8em; color: #007bff; background:none; border:none; padding:0; cursor:pointer; text-decoration: underline; }
+        .delete-btn { color: #dc3545; }
+    </style>
+</head>
+<body>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <ul class="flash-messages">
+            {% for category, message in messages %}
+                <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+        {% endif %}
+    {% endwith %}
+
+    <div class="top-bar">
+        <a href="{{ url_for('main_page', year=prev_year, month=prev_month, day=selected_date_str.split('-')[2] if selected_date_str else None) }}" class="nav-button">&lt; 이전 달</a>
+        <h2>{{ current_month_year_str }}</h2>
+        <a href="{{ url_for('main_page', year=next_year, month=next_month, day=selected_date_str.split('-')[2] if selected_date_str else None) }}" class="nav-button" id="next-month-button">다음 달 &gt;</a>
+        <div class="user-actions">
+            {% if logged_in_user %}
+                <span>안녕하세요, {{ logged_in_user }}님!</span>
+                <form action="{{ url_for('toggle_today_activity') }}" method="POST" style="display: inline;">
+                    <input type="hidden" name="current_year_for_redirect" value="{{ current_year }}">
+                    <input type="hidden" name="current_month_for_redirect" value="{{ current_month }}">
+                    {# 현재 선택된 날짜도 리다이렉션 시 유지하기 위해 추가 #}
+                    <input type="hidden" name="current_day_for_redirect" value="{{ selected_date_str.split('-')[2] if selected_date_str else '' }}">
+                    {% if user_has_activity_today %}
+                        <button type="submit">오늘활동O</button>
+                    {% else %}
+                        <button type="submit">오늘활동X</button>
+                    {% endif %}
+                </form>
+                <a href="{{ url_for('logout') }}">로그아웃</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">로그인</a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="main-content-wrapper">
+        <div class="main-content">
+            <div class="calendar-container">
+                <table class="calendar">
+                    <thead>
+                        <tr>
+                            {% for header in day_headers %}
+                            <th>{{ header }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for week in calendar_data %}
+                        <tr>
+                            {% for day_info in week %}
+                            <td class="{{ 'today' if day_info.is_today else '' }} {{ 'selected-day' if day_info.date_str == selected_date_str else '' }} calendar-day-cell">
+                                {% if day_info.day_num == 0 %}
+                                    <span class="other-month"></span>
+                                {% else %}
+                                <a href="{{ url_for('main_page', year=current_year, month=current_month, day=day_info.day_num) }}">
+                                    <span class="day-number">{{ day_info.day_num }}</span>
+                                    <div class="check-mark-area">
+                                        {% for check in day_info.checks %}
+                                        <span class="check-mark" style="background-color: {{ check.color }};" title="{{ check.user_id }}"></span>
+                                        {% endfor %}
+                                    </div>
+                                </a>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="user-stats-container">
+                <h3>사용자 현황</h3>
+                {% for stat in user_stats %}
+                <div class="user-stat">
+                    {# 추가된 색상 동그라미 #}
+                    <span class="user-color-indicator" style="background-color: {{ stat.color }};"></span>
+                    <strong>{{ stat.name }}:</strong> {{ stat.coffee_display }}
+                </div>
+                {% else %}
+                <p>표시할 사용자 정보가 없습니다.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="thoughts-section">
+            {% if selected_date_str %}
+                <h3>{{ selected_date_str }}의 생각/질문</h3>
+            {% else %}
+                <h3>오늘({{ today_str }})의 생각/질문 남기기</h3>
+            {% endif %}
+
+            {% if logged_in_user and (not selected_date_str or selected_date_str == today_str) %}
+                {% if not user_posted_thought_today %}
+                <div class="thought-form">
+                    <form action="{{ url_for('add_thought') }}" method="POST">
+                        <input type="hidden" name="current_year_for_redirect" value="{{ current_year }}">
+                        <input type="hidden" name="current_month_for_redirect" value="{{ current_month }}">
+                        {# add_thought 후 오늘 날짜로 리다이렉트하므로 day는 오늘 날짜의 day #}
+                        <input type="hidden" name="current_day_for_redirect" value="{{ today_str.split('-')[2] }}">
+                        <textarea name="thought_text" placeholder="오늘의 생각이나 질문을 공유해보세요... (하루에 한 번만 작성 가능)"></textarea>
+                        <button type="submit">기록하기</button>
+                    </form>
+                </div>
+                {% elif selected_date_str == today_str %}
+                 <p>오늘은 이미 생각을 남기셨습니다.</p>
+                {% endif %}
+            {% endif %}
+
+
+            {% if thoughts_for_selected_date %}
+                {% for thought in thoughts_for_selected_date %}
+                <div class="thought-item">
+                    <div class="info">
+                        <span class="user-timestamp">
+                            <strong>{{ thought.user_id }}</strong> ({{ thought.timestamp.strftime('%Y-%m-%d %H:%M') }})
+                        </span>
+                        <span class="actions-group"> {# 수정/삭제 그룹 #}
+                        {% if thought.user_id == current_user_id_for_template %}
+                            <a href="{{ url_for('edit_thought', thought_id=thought.id) }}" class="edit-delete-btn">수정</a>
+                            <form action="{{ url_for('delete_thought', thought_id=thought.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('정말로 이 글을 삭제하시겠습니까?');">
+                                <input type="hidden" name="current_year_for_redirect" value="{{ current_year }}">
+                                <input type="hidden" name="current_month_for_redirect" value="{{ current_month }}">
+                                <input type="hidden" name="current_day_for_redirect" value="{{ selected_date_str.split('-')[2] if selected_date_str else '' }}">
+                                <button type="submit" class="edit-delete-btn delete-btn">삭제</button>
+                            </form>
+                        {% endif %}
+                        </span>
+                    </div>
+                    <p>{{ thought.text }}</p>
+                    <div class="actions">
+                        {% if thought.user_id == current_user_id_for_template %}
+                            {# 자신의 글일 경우 - 클릭 불가능한 빨간 하트와 카운트만 표시 #}
+                            <span class="like-display">❤️</span> {# CSS로 버튼처럼 보이지 않게 처리 가능 #}
+                            <span class="like-count">{{ thought.likes|length }}</span>
+                        {% else %}
+                            {# 다른 사람의 글일 경우 - 클릭 가능한 하트 버튼 (토글) #}
+                            <form action="{{ url_for('like_thought', thought_id=thought.id) }}" method="POST" style="display:inline;">
+                                <input type="hidden" name="current_year_for_redirect" value="{{ current_year }}">
+                                <input type="hidden" name="current_month_for_redirect" value="{{ current_month }}">
+                                <input type="hidden" name="current_day_for_redirect" value="{{ selected_date_str.split('-')[2] if selected_date_str else ''}}">
+                                <button type="submit" class="like-btn" title="하트 {{ '취소' if current_user_id_for_template in thought.likes else '누르기' }}">
+                                    {% if current_user_id_for_template in thought.likes %}❤️{% else %}♡{% endif %}
+                                </button>
+                            </form>
+                            <span class="like-count">{{ thought.likes|length }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="comments-section">
+                        <h4>댓글</h4>
+                        {% for comment in thought.comments %}
+                        <div class="comment-item">
+                            <div class="info">
+                                <span class="user-timestamp"> {# 새로운 span 추가#}
+                                    <strong>{{ comment.user_id }}</strong> ({{ comment.timestamp.strftime('%H:%M:%S') }})
+                                </span>
+                                <span class="actions-group"> {# 댓글 수정/삭제 그룹 #}
+                                {% if comment.user_id == current_user_id_for_template %}
+                                    <a href="{{ url_for('edit_comment', comment_id=comment.id) }}" class="edit-delete-btn">수정</a>
+                                    <form action="{{ url_for('delete_comment', comment_id=comment.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('정말로 이 댓글을 삭제하시겠습니까?');">
+                                        <input type="hidden" name="current_year_for_redirect" value="{{ current_year }}">
+                                        <input type="hidden" name="current_month_for_redirect" value="{{ current_month }}">
+                                        <input type="hidden" name="current_day_for_redirect" value="{{ selected_date_str.split('-')[2] if selected_date_str else '' }}">
+                                        <button type="submit" class="edit-delete-btn delete-btn">삭제</button>
+                                    </form>
+                                {% endif %}
+                                </span>
+                            </div>
+                            <p>{{ comment.text }}</p>
+                        </div>
+                        {% else %}
+                        <p style="font-size:0.9em; color:#777;">아직 댓글이 없습니다.</p>
+                        {% endfor %}
+
+                        {% if logged_in_user %}
+                        <form class="comment-form" action="{{ url_for('add_comment') }}" method="POST">
+                            <input type="hidden" name="thought_date_str" value="{{ selected_date_str }}">
+                            <input type="hidden" name="thought_id" value="{{ thought.id }}">
+                            <input type="hidden" name="current_year_for_redirect" value="{{ current_year }}">
+                            <input type="hidden" name="current_month_for_redirect" value="{{ current_month }}">
+                            <input type="hidden" name="current_day_for_redirect" value="{{ selected_date_str.split('-')[2] if selected_date_str else '' }}">
+                            <textarea name="comment_text" placeholder="댓글을 남겨주세요..."></textarea>
+                            <button type="submit">댓글 달기</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% elif selected_date_str %}
+                <p>{{ selected_date_str }}에는 공유된 생각이 없습니다.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,12 @@
+/my_web_project
+├── app.py                     # Flask 애플리케이션
+├── /templates                 # HTML 파일들을 저장하는 폴더
+│   └── main.html
+├── /static                    # CSS, JavaScript, 이미지 등 정적 파일들을 저장하는 폴더
+│   ├── /css
+│   │   └── style.css
+│   └── /js
+│       └── script.js
+├── requirements.txt           # 필요한 파이썬 패키지 목록
+├── Procfile                   # (Heroku 배포 시 필요)
+└── venv/                      # 가상 환경 폴더
